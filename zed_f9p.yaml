@@ -1,0 +1,226 @@
+# zed_f9p.yaml - 详细注释版
+# 适用于 ZED-F9P 作为 RTK Rover (移动站) 在 ROS 2 Humble 环境下的配置
+# 驱动节点: ublox_gps_node
+
+ublox_gps_node:
+  ros__parameters:
+    # --------------------------------------------------------------------------
+    # 调试与日志级别 (Debugging)
+    # --------------------------------------------------------------------------
+    debug: 1 # 日志级别:
+             #   0: 关闭 (Off)
+             #   1: 错误 (Error) - 推荐稳定运行时使用
+             #   2: 警告 (Warning)
+             #   3: 信息 (Info) - 推荐调试时使用
+             #   4: 调试 (Debug) - 最详细日志，用于深入问题排查
+
+    # --------------------------------------------------------------------------
+    # 设备连接 (Device Connection)
+    # --------------------------------------------------------------------------
+    device: /dev/ttyACM0  # GPS模块连接的串口设备路径。
+                          # <--- !!! 重要: 请根据您的实际设备路径修改 !!!
+                          # 通常是 /dev/ttyACM0, /dev/ttyACM1, /dev/ttyUSB0 等。
+                          # 可以使用命令 `ls /dev/ttyACM*` 或 `ls /dev/ttyUSB*` 查看。
+
+    frame_id: gps_link    # 发布的ROS TF坐标系名称。
+                          # 这个名称将用于所有发布的带有Header的消息 (如NavSatFix, Pose, Twist)。
+                          # `gps_link` 是一个常用且直观的名称。
+
+    # --------------------------------------------------------------------------
+    # UART1 配置 (ZED-F9P通过USB连接时的主通信接口)
+    # --------------------------------------------------------------------------
+    # ZED-F9P通过USB连接到计算机时，其内部的UART1接口被虚拟化为USB CDC ACM设备。
+    # 因此，这里的uart1配置实际上是针对USB连接的。
+    uart1:
+      baudrate: 460800  # UART1 (即USB虚拟串口) 的波特率。
+                        # 驱动会尝试将模块配置为此波特率。
+                        # ZED-F9P出厂默认波特率通常是38400。
+                        # 460800是较高速度，适合高频率数据输出 (如10Hz)。
+                        # 如果连接不稳定或无法通信，可尝试降低至38400或115200。
+                        # 确保模块在启动时能被驱动成功配置到此波特率。
+      # in: 1            # 输入协议掩码 (UBX_RX_MSG_IN_PROTO_UBX)。通常驱动默认处理。
+      # out: 1           # 输出协议掩码 (UBX_RX_MSG_OUT_PROTO_UBX)。通常驱动默认处理。
+
+    # --------------------------------------------------------------------------
+    # 芯片启动时配置 (Chip Configuration on Startup)
+    # --------------------------------------------------------------------------
+    config_on_startup: true # true: 驱动节点启动时，会根据此YAML文件中的设置来配置ZED-F9P模块。
+                            # false: 驱动不修改模块配置，使用模块当前非易失性存储器中保存的配置。
+                            # 对于初次使用或确保配置一致性，强烈建议设为 true。
+
+    load:                   # 从模块非易失性存储器加载/保存配置
+      mask: 0               # 加载掩码。通常设为0，让驱动根据其他参数配置。
+      # device: 1           # 设备掩码 (1=EEPROM, 2=FLASH, 4=SPI FLASH, 8=I2C EEPROM)。ZED-F9P通常用FLASH。
+
+    save:                   # 保存当前配置到模块非易失性存储器
+      mask: 0               # 保存掩码。0表示不自动保存。
+                            # 如果希望驱动将当前配置（包括本YAML和运行时修改的）保存到模块，可以设置相应掩码。
+                            # 例如，`mask: 2719` (0x0A9F) 会保存 IO Port, Messages, INF Message, NAVigation, RXManger, Senesor interface, external interrupt, logging filter, NMEA, ANTanna, LOGFilter 配置。
+                            # 注意：频繁保存可能影响闪存寿命。通常在配置稳定后手动保存一次即可 (如通过U-Center)。
+      # device: 2           # 设备掩码 (同上)。
+
+    # --------------------------------------------------------------------------
+    # 测量和导航更新率 (Measurement and Navigation Rate)
+    # --------------------------------------------------------------------------
+    # cfg_rate: # 旧版参数名，新版驱动可能直接使用 `rate` 或 `publish_rate`
+    rate: 10.0              # 导航解算结果（位置、速度等）的更新频率 (Hz)。
+                            # ZED-F9P最高可支持到20Hz或更高，取决于启用的GNSS系统和消息。
+                            # 10Hz 是一个常用的值。
+    # meas_rate_hz: 10.0    # GNSS原始测量数据的更新频率 (Hz)。通常与`rate`一致或由其决定。
+                            # 对于ZED-F9P，`rate` 参数通常会同时设置测量周期和导航周期。
+
+    # --------------------------------------------------------------------------
+    # 动态模型 (Dynamic Model)
+    # --------------------------------------------------------------------------
+    # 影响卡尔曼滤波器的行为，以适应不同的运动特性。
+    # 对于地面移动机器人(Rover)，车载模型通常是最佳选择。
+    dmodel: 4               # 动态模型:
+                            #   0: Portable (便携式，适用于低动态或静止)
+                            #   2: Stationary (静止，用于基站Survey-in等)
+                            #   3: Pedestrian (行人)
+                            #   4: Automotive (车载，Rover推荐使用)
+                            #   5: Sea (航海)
+                            #   6: Airborne <1g (机载, 加速度 <1g)
+                            #   7: Airborne <2g (机载, 加速度 <2g)
+                            #   8: Airborne <4g (机载, 加速度 <4g)
+                            #   9: Wrist (手腕佩戴，如智能手表)
+                            #  10: Bike (自行车)
+                            #  如果注释掉或未指定，驱动可能使用默认值(通常是Portable或Automotive)。
+
+    # --------------------------------------------------------------------------
+    # GNSS 系统配置 (GNSS Configuration)
+    # --------------------------------------------------------------------------
+    # 启用/禁用不同的卫星系统。根据地区和需求调整。
+    # 通常启用更多系统能提高定位的可用性和稳定性。
+    gnss:
+      gps: true             # 启用 GPS
+      glonass: true         # 启用 GLONASS
+      galileo: true         # 启用 Galileo
+      beidou: true          # 启用 BeiDou
+      sbas: false           # 启用 SBAS (星基增强系统, e.g., WAAS, EGNOS)。对于RTK通常不必要，有时可能干扰RTK。
+      qzss: true            # 启用 QZSS (准天顶卫星系统, 主要覆盖日本及周边地区)。如果不在服务区，可以禁用。
+      imes: false           # 启用 IMES (室内消息系统，日本)。
+
+    # --------------------------------------------------------------------------
+    # RTK 设置 (RTK Settings for Rover)
+    # --------------------------------------------------------------------------
+    # tmode3: 0             # 时间模式3 (Survey-In)。0: 禁用。此为Rover配置，不应启用Survey-In。
+                            # Survey-In (e.g., `tmode3: 1` 或 `2`) 仅用于RTK基站。
+
+    # 关键的RTK Rover模式设置。ublox_read_write_services中可能是通过 set_configuration 设置。
+    # 在某些版本的驱动中，RTK模式可能通过更底层的UBX消息配置，而不是直接的YAML参数。
+    # 以下是基于一般理解，具体参数名可能因驱动版本而异。
+    # 通常，作为Rover，模块需要被配置为接收RTCM3改正数据。
+    # `config_on_startup: true` 结合正确的 `publish` 设置和差分数据输入是关键。
+    # 确保gnss.rtk.mode这样的结构是驱动支持的，或者通过其他方式（如U-Center预配置后设置`config_on_startup: false`）
+    # 这个参数在OCR中被放在 `gnss:` 下的 `rtk:` 子项中，这里遵循该结构。
+    # gnss: # (已在上方定义，这里仅为展示RTK的层级)
+    rtk:
+      mode: 1             # RTK模式设置:
+                          #   0: 关闭RTK (No RTK)
+                          #   1: RTK Rover (移动站模式，接收差分数据进行高精度定位) <--- !!! Rover关键设置 !!!
+                          #   2: RTK Base (基站模式，此YAML不适用，基站需另外配置并输出差分数据)
+
+    # --------------------------------------------------------------------------
+    # 物理UART2配置 - 用于接收RTCM差分数据 (可选)
+    # --------------------------------------------------------------------------
+    # 如果您的RTCM差分数据通过独立的物理连接 (如数传电台) 输入到ZED-F9P的UART2接口，
+    # 则取消注释并配置此部分。
+    # 如果RTCM数据通过主USB/UART1接口注入 (例如由NTRIP客户端获取并通过ROS话题转发给ublox_gps节点)，
+    # 则无需配置此ports.uart2部分。
+    # ports:
+    #   uart2:
+    #     baudrate: 115200  # UART2接收RTCM差分数据的波特率。请与差分源输出的波特率匹配。
+    #     in: 2             # 输入协议掩码。`2` 在此驱动中通常代表 RTCM3。
+    #                       # (有些文档或原始UBX协议可能用 `16` 或 `0x10` 代表RTCM3X，请以驱动文档为准)
+    #     out: 0            # 输出协议掩码。0 代表无输出。Rover通常不从UART2输出。
+
+    # --------------------------------------------------------------------------
+    # ROS 消息发布配置 (Message Publishing Configuration)
+    # --------------------------------------------------------------------------
+    # 控制节点发布哪些类型的GPS数据。
+    publish:
+      all: false            # 设为 false (推荐) 可以精确控制下面各项消息的发布。
+                            # 设为 true 则会发布所有支持的消息，可能产生大量不必要的数据。
+
+      # 标准ROS消息
+      nav_sat_fix: true     # 发布 sensor_msgs/NavSatFix 到 `/fix` 话题。
+                            # 这是ROS中标准的GPS位置消息，包含经纬高、协方差、状态等。
+      twist: true           # 发布 geometry_msgs/TwistWithCovarianceStamped 到 `/fix_velocity` (或类似) 话题。
+                            # 包含线速度和角速度信息。话题名可能根据驱动实际情况调整。
+      pose: true            # 发布 geometry_msgs/PoseWithCovarianceStamped 到 `/pose` (或类似) 话题。
+                            # 包含位姿信息 (位置和方向)。方向通常来自航向角 (如果可用)。
+
+      # UBX协议特定消息 (原始u-blox消息，信息更丰富或更底层)
+      # NAV (Navigation solution messages)
+      nav:
+        all: false          # 精确控制NAV系列消息
+        pvt: true           # 发布 UBX-NAV-PVT (Position, Velocity, Time)。
+                            # 核心导航数据，包含位置、速度、时间、精度、模式(Fix type, RTK status)等非常详细的信息。
+                            # <--- !!! 强烈推荐发布，包含大量诊断信息，如RTK状态 !!!
+        hpposllh: true      # 发布 UBX-NAV-HPPOSLLH (High Precision Position LLH)。
+                            # 包含高精度的经纬高信息。RTK模式下非常有用。
+        relposned: true     # 发布 UBX-NAV-RELPOSNED (Relative Positioning NED)。
+                            # 包含相对于基站的东北天(NED)坐标系下的相对位置矢量和航向。
+                            # <--- !!! RTK Rover模式下获取高精度相对位置和航向的关键输出 !!!
+        status: true        # 发布 UBX-NAV-STATUS (Receiver Navigation Status)。
+                            # 包含GPS定位状态，如 fix type, diffSoln, psmState。
+        sat: true           # 发布 UBX-NAV-SAT (Satellite Information)。
+                            # 包含可见卫星的信息，如PRN、仰角、方位角、信号强度(cno)等。用于诊断信号质量。
+        sol: false          # 发布 UBX-NAV-SOL (Navigation Solution Information)。旧版PVT的替代，通常PVT更常用。
+        # 其他NAV消息按需启用: att, clock, dgps, dops, eoe, geofence, odo, orb, posecef, posllh, sbas, timegps, timeutc, velned...
+
+      # RXM (Receiver Manager Messages) - 主要用于原始数据和差分数据
+      rxm:
+        all: false
+        rawx: false         # 发布 UBX-RXM-RAWX (Multi-GNSS Raw Measurement Data)。
+                            # 包含伪距、载波相位、多普勒等原始观测量。用于后处理或自定义算法。数据量大。
+        rtcm: false         # 发布 UBX-RXM-RTCM (RTCM Input Status)。
+                            # 如果模块正在接收RTCM数据，此消息可用于监控RTCM输入状态。对于Rover调试有用。
+        # sfrbx: false        # 发布 UBX-RXM-SFRBX (Broadcast Navigation Data Subframe)。原始星历数据。
+
+      # MON (Monitoring Messages) - 用于监控硬件和固件状态
+      mon:
+        all: false
+        hw: false           # 发布 UBX-MON-HW (Hardware Status)。监控天线状态、干扰等。
+
+      # INF (Information Messages) - 文本信息，如通知、警告、错误
+      # inf:
+      #   all: true # 通常通过日志级别控制，不一定需要作为ROS消息发布
+
+      # AID (AssistNow Aiding messages) - 辅助定位数据
+      # aid:
+      #   all: false
+
+      # TIM (Timing Messages) - 精确时间信息
+      # tim:
+      #   all: false
+      #   tm2: true # 发布 UBX-TIM-TM2 (Time Mark Data)。当外部事件触发时间标记时。
+
+    # --------------------------------------------------------------------------
+    # 其他高级配置 (Advanced / Less Common)
+    # --------------------------------------------------------------------------
+    # low_gnss_space_osc_on_usb_pwr_save: false # 低功耗模式相关
+    # use_adr: true # Automotive Dead Reckoning. ZED-F9P本身不支持ADR，F9K支持。
+
+    # SBAS (Satellite-Based Augmentation System) 配置
+    # sbas_usage: 0 # 0: Disabled, 1: With Ranging, 2: With Corrections, 3: With Ranging and Corrections
+                    # 对于RTK，通常将sbas设为false (禁用)
+
+    # NMEA协议输出配置 (如果需要)
+    # nmea:
+    #   version: "4.1" # NMEA版本 (e.g., "2.3", "4.0", "4.1")
+    #   bds_talker_id: false # false: Use standard talker ID for BeiDou (GB), true: Use BeiDou specific (BD)
+    #   compat: true # NMEA compatibility mode
+    #   filter: # 消息过滤器
+    #     pos: false
+    #     msk_pos: false
+    #     attr: false
+    #     sens: false
+    #     talker: false
+    #   gga: 0 # 0: Disabled, 1: Enabled (GGA - Global positioning system fix data)
+    #   gsa: 0 # (GSA - GNSS DOP and active satellites)
+    #   gsv: 0 # (GSV - GNSS satellites in view)
+    #   rmc: 0 # (RMC - Recommended minimum specific GNSS data)
+    #   vtg: 0 # (VTG - Course over ground and ground speed)
+    #   # ... 其他NMEA消息类型
